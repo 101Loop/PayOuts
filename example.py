@@ -1,6 +1,6 @@
-import os
 import datetime
-from dataclasses import asdict
+import json
+import os
 from decimal import Decimal
 
 from tempoapiclient import client
@@ -17,5 +17,7 @@ c = Consultant(billing_mode=BillMode.MONTHLY, rate=Decimal("9680"), tempo_instan
 payouts = c.invoices_in_range(
     start_date=datetime.date.fromisoformat("2021-06-01"), end_date=datetime.date.fromisoformat("2021-07-31")
 )
-for p in payouts.values():
-    print(asdict(p))
+
+json_response = {p.invoice_date.isoformat(): p.to_json() for p in payouts.values()}
+
+print(json.dumps(json_response, indent=4))

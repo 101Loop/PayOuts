@@ -1,5 +1,5 @@
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 import datetime
 from decimal import Decimal
 from enum import Enum
@@ -10,6 +10,35 @@ from tempoapiclient.client import Tempo
 
 JIRA_BASE_URL = os.environ["JIRA_BASE_URL"]
 TEMPO_BASE_URL = os.environ["TEMPO_BASE_URL"]
+
+
+def to_json(object):
+    def format_value(value):
+        json_val = value
+        if isinstance(json_val, (datetime.date, datetime.datetime)):
+            json_val = json_val.isoformat()
+        elif isinstance(json_val, Decimal):
+            json_val = str(json_val)
+        elif isinstance(json_val, BillMode):
+            json_val = {"name": json_val.name, "value": json_val.value}
+        elif isinstance(json_val, list):
+            json_val = [format_value(curr_val) for curr_val in json_val]
+        elif isinstance(json_val, dict):
+            json_val = {format_value(curr_key): format_value(curr_val) for curr_key, curr_val in json_val.items()}
+        elif isinstance(json_val, (WorkLog, InvoiceItem, Invoice)):
+            json_val = json_val.to_json()
+        elif isinstance(json_val, (TempoUser, JiraIssue)):
+            json_val = asdict(json_val)
+        return json_val
+
+    json_dict = {}
+
+    for key, val in object.__dict__.items():
+        json_val = format_value(val)
+        json_key = format_value(key)
+        json_dict[json_key] = json_val
+
+    return json_dict
 
 
 class BillMode(Enum):
@@ -97,6 +126,11 @@ class WorkLog:
         """Hours"""
         return self.billable_seconds / Decimal(60 * 60)
 
+    def to_json(self):
+        json_dict = {"hours": str(self.hours)}
+        json_dict.update(to_json(self))
+        return json_dict
+
     @staticmethod
     def filter_account_value(attribute) -> bool:
         """Filter Account Value
@@ -171,7 +205,7 @@ class InvoiceItem:
         return self.work_unit + Decimal(other)
 
     @property
-    def total_work_hours(self):
+    def total_work_hours(self) -> Decimal:
         return sum(self.work_logs)
 
     @property
@@ -199,6 +233,15 @@ class InvoiceItem:
             else Decimal(self.is_workday and self.total_work_hours > 3)
         )
 
+    def to_json(self):
+        json_dict = {
+            "total_work_hours": str(self.total_work_hours),
+            "is_workday": self.is_workday,
+            "work_unit": str(self.work_unit),
+        }
+        json_dict.update(to_json(self))
+        return json_dict
+
 
 @dataclass
 class Invoice:
@@ -213,36 +256,28 @@ class Invoice:
 
     rate: Decimal
     billing_mode: BillMode
-    bills: Dict[datetime.date, InvoiceItem] = field(default_factory=dict)
+    items: Dict[datetime.date, InvoiceItem] = field(default_factory=dict)
 
     def __post_init__(self):
         """
-        Initialize self.bills with all dates in the invoice and a blank bill
+        Initialize self.items with all dates in the invoice and a blank bill
         """
         next_date = self.start_date
         while next_date <= self.invoice_date:
-            self.bills[next_date] = InvoiceItem(date=next_date, billing_mode=self.billing_mode)
+            self.items[next_date] = InvoiceItem(date=next_date, billing_mode=self.billing_mode)
             next_date += datetime.timedelta(days=1)
 
     def __str__(self):
         return f"{self.invoice_date.isoformat()} - {self.invoice_amount}"
-
-    def total_work_days(self) -> int:
-        """Total Work Days
-
-        Returns:
-            int: Sum of work days in each bill
-        """
-        return sum(int(bill.is_workday) for bill in self.bills.values())
 
     @property
     def total_work_unit(self) -> Decimal:
         """Total Work Unit
 
         Returns:
-            Decimal: Sum of work unit of each bills
+            Decimal: Sum of work unit of each items
         """
-        return sum(self.bills.values())
+        return sum(self.items.values())
 
     @property
     def net_rate(self) -> Decimal:
@@ -280,6 +315,26 @@ class Invoice:
             datetime.date: Due date based on NET30 term
         """
         return self.invoice_date + datetime.timedelta(days=30)
+
+    def total_work_days(self) -> int:
+        """Total Work Days
+
+        Returns:
+            int: Sum of work days in each bill
+        """
+        return sum(int(bill.is_workday) for bill in self.items.values())
+
+    def to_json(self) -> Dict:
+        json_dict = {
+            "total_work_days": str(self.total_work_days()),
+            "total_work_unit": str(self.total_work_unit),
+            "net_rate": str(self.net_rate),
+            "invoice_amount": str(self.invoice_amount),
+            "due_date": self.due_date.isoformat(),
+        }
+
+        json_dict.update(to_json(self))
+        return json_dict
 
 
 @dataclass
@@ -336,8 +391,8 @@ class Consultant:
         work_logs = self.tempo_instance.get_worklogs(dateFrom=start_date, dateTo=end_date)
         work_log_objects = map(WorkLog.from_tempo_api, work_logs)
 
-        # Add all work log in invoice bills
-        [invoice.bills[work_log.date].work_logs.append(work_log) for work_log in work_log_objects]
+        # Add all work log in invoice items
+        [invoice.items[work_log.date].work_logs.append(work_log) for work_log in work_log_objects]
 
         return invoice
 
