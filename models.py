@@ -106,7 +106,7 @@ class WorkLog:
         Returns:
             bool: True if attribute is for Account, False otherwise
         """
-        return True if attribute["key"] == "_Account_" else False
+        return attribute["key"] == "_Account_"
 
     @classmethod
     def from_tempo_api(cls, worklog_dict: Dict):
@@ -234,11 +234,7 @@ class PayOut:
         Returns:
             int: Sum of work days in each bill
         """
-        work_days = 0
-        for bill in self.bills.values():
-            work_days += int(bill.is_workday)
-
-        return work_days
+        return sum(int(bill.is_workday) for bill in self.bills.values())
 
     @property
     def total_work_unit(self) -> Decimal:
