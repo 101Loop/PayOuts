@@ -130,10 +130,10 @@ class WorkLog:
 
 
 @dataclass
-class Bill:
-    """Bill
+class InvoiceItems:
+    """InvoiceItems
 
-    Represents a bill item for one work day.
+    Represents an invoice item. Each item corresponds to one work day.
     """
 
     date: datetime.date
@@ -154,7 +154,7 @@ class Bill:
 
         Used in __add__ and __radd__
 
-        Each Bill can be added to any int, float, decimal or another Bill.
+        Each InvoiceItems can be added to any int, float, decimal or another InvoiceItems.
         `work_unit` attribute is added.
 
         Args:
@@ -163,7 +163,7 @@ class Bill:
         Returns:
             Decimal: Sum of self.work_unit and other
         """
-        if isinstance(other, Bill):
+        if isinstance(other, InvoiceItems):
             other = other.work_unit
         elif isinstance(other, (int, float)):
             other = str(other)
@@ -201,10 +201,10 @@ class Bill:
 
 
 @dataclass
-class PayOut:
-    """PayOut
+class Invoice:
+    """Invoice
 
-    Represents a PayOut object for work done between start date and invoice date, both inclusive.
+    Represents a Invoice object for work done between start date and invoice date, both inclusive.
     """
 
     start_date: datetime.date
@@ -213,20 +213,19 @@ class PayOut:
 
     rate: Decimal
     billing_mode: BillMode
-    bills: Dict[datetime.date, Bill] = field(default_factory=dict)
-    payout_date: datetime.date = None
+    bills: Dict[datetime.date, InvoiceItems] = field(default_factory=dict)
 
     def __post_init__(self):
         """
-        Initialize self.bills with all dates in the payout and a blank bill
+        Initialize self.bills with all dates in the invoice and a blank bill
         """
         next_date = self.start_date
         while next_date <= self.invoice_date:
-            self.bills[next_date] = Bill(date=next_date, billing_mode=self.billing_mode)
+            self.bills[next_date] = InvoiceItems(date=next_date, billing_mode=self.billing_mode)
             next_date += datetime.timedelta(days=1)
 
     def __str__(self):
-        return f"{self.invoice_date.isoformat()} - {self.payout_amount}"
+        return f"{self.invoice_date.isoformat()} - {self.invoice_amount}"
 
     def total_work_days(self) -> int:
         """Total Work Days
@@ -267,8 +266,8 @@ class PayOut:
         return round(rate, 4)
 
     @property
-    def payout_amount(self) -> Decimal:
-        """Payout Amount"""
+    def invoice_amount(self) -> Decimal:
+        """Invoice Amount"""
         return round(self.net_rate * self.total_work_unit, 4)
 
     @property
@@ -320,45 +319,45 @@ class Consultant:
 
         return start_date, end_date
 
-    def __payout_for_work_date(self, work_date: datetime.date) -> PayOut:
-        """Payout for work date
+    def __invoice_for_work_date(self, work_date: datetime.date) -> Invoice:
+        """Invoice for work date
 
-        Computes PayOut for a given work date.
+        Computes Invoice for a given work date.
 
         Args:
             work_date (datetime.date): Can we any date within 7 days week period
 
         Returns:
-            PayOut: PayOut object
+            Invoice: Invoice object
         """
         start_date, end_date = Consultant.billing_date_bounds(date=work_date)
-        payout = PayOut(start_date=start_date, invoice_date=end_date, billing_mode=self.billing_mode, rate=self.rate)
+        invoice = Invoice(start_date=start_date, invoice_date=end_date, billing_mode=self.billing_mode, rate=self.rate)
 
         work_logs = self.tempo_instance.get_worklogs(dateFrom=start_date, dateTo=end_date)
         work_log_objects = map(WorkLog.from_tempo_api, work_logs)
 
-        # Add all work log in payout bills
-        [payout.bills[work_log.date].work_logs.append(work_log) for work_log in work_log_objects]
+        # Add all work log in invoice bills
+        [invoice.bills[work_log.date].work_logs.append(work_log) for work_log in work_log_objects]
 
-        return payout
+        return invoice
 
-    def payouts_in_range(self, start_date: datetime.date, end_date: datetime.date) -> Dict[datetime.date, PayOut]:
-        """Payouts in Range
+    def invoices_in_range(self, start_date: datetime.date, end_date: datetime.date) -> Dict[datetime.date, Invoice]:
+        """Invoices in Range
 
-        Computes all possible payouts for work done between start date and end date
+        Computes all possible invoices for work done between start date and end date
 
         Args:
             start_date (datetime.date): Start date of range
             end_date (datetime.date): End date of range
 
         Returns:
-            dict: Dictionary containing invoice date as key and corresponding PayOut object as value
+            dict: Dictionary containing invoice date as key and corresponding Invoice object as value
         """
-        payouts = {}
+        invoices = {}
         next_date = start_date
         while next_date <= end_date:
-            payout = self.__payout_for_work_date(work_date=next_date)
+            invoice = self.__invoice_for_work_date(work_date=next_date)
             next_date += datetime.timedelta(days=7)
-            payouts[payout.invoice_date] = payout
+            invoices[invoice.invoice_date] = invoice
 
-        return payouts
+        return invoices
