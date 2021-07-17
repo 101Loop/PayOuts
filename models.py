@@ -130,8 +130,8 @@ class WorkLog:
 
 
 @dataclass
-class InvoiceItems:
-    """InvoiceItems
+class InvoiceItem:
+    """InvoiceItem
 
     Represents an invoice item. Each item corresponds to one work day.
     """
@@ -154,7 +154,7 @@ class InvoiceItems:
 
         Used in __add__ and __radd__
 
-        Each InvoiceItems can be added to any int, float, decimal or another InvoiceItems.
+        Each InvoiceItem can be added to any int, float, decimal or another InvoiceItem.
         `work_unit` attribute is added.
 
         Args:
@@ -163,7 +163,7 @@ class InvoiceItems:
         Returns:
             Decimal: Sum of self.work_unit and other
         """
-        if isinstance(other, InvoiceItems):
+        if isinstance(other, InvoiceItem):
             other = other.work_unit
         elif isinstance(other, (int, float)):
             other = str(other)
@@ -213,7 +213,7 @@ class Invoice:
 
     rate: Decimal
     billing_mode: BillMode
-    bills: Dict[datetime.date, InvoiceItems] = field(default_factory=dict)
+    bills: Dict[datetime.date, InvoiceItem] = field(default_factory=dict)
 
     def __post_init__(self):
         """
@@ -221,7 +221,7 @@ class Invoice:
         """
         next_date = self.start_date
         while next_date <= self.invoice_date:
-            self.bills[next_date] = InvoiceItems(date=next_date, billing_mode=self.billing_mode)
+            self.bills[next_date] = InvoiceItem(date=next_date, billing_mode=self.billing_mode)
             next_date += datetime.timedelta(days=1)
 
     def __str__(self):
