@@ -19,5 +19,3 @@ payouts = c.payouts_in_range(
 )
 for p in payouts.values():
     print(asdict(p))
-
-print("Testing")
