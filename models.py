@@ -1,9 +1,10 @@
+import calendar
 import os
 from dataclasses import dataclass, field, asdict
 import datetime
 from decimal import Decimal
 from enum import Enum
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 from tempoapiclient.client import Tempo
 
@@ -213,7 +214,6 @@ class InvoiceItem:
         """Is Workday
 
         Check whether the bill date is a countable workday
-        TODO: How are we checking workday?
 
         Returns:
             True if total work hours is more than 0 or weekday is in Mon-Fri
@@ -230,7 +230,7 @@ class InvoiceItem:
         return (
             self.total_work_hours
             if self.billing_mode == BillMode.HOURLY
-            else Decimal(self.is_workday and self.total_work_hours > 3)
+            else Decimal(True)
         )
 
     def to_json(self):
@@ -284,8 +284,9 @@ class Invoice:
         """Net Rate
 
         In case of hourly, net rate is rate itself.
-        In case of monthly billing, net rate varies. self.rate is 160 hours or 4 weeks equivalent rate.
-        Further, daily rate is calculated based on number of working days in week.
+        In case of monthly billing, net rate varies.
+        Further, daily rate is calculated based on dividing monthly rate with total number of days in the month and
+        calculating on the basis of 7 days in a week.
 
         Returns:
             Decimal: rate rounded upto 4 places
@@ -293,11 +294,19 @@ class Invoice:
         if self.billing_mode == BillMode.HOURLY:
             rate: Decimal = self.rate
         else:
-            # For hourly, SUB160 package is used. 160 Hours is equivalent to 4 weeks with 5 working days, 8 hours each
-            # TODO: The daily rate may vary depending on number of working days in the week - Need to confirm the logic
-            weekly_rate = self.rate / 4
-            daily_rate = weekly_rate / self.total_work_days()
-            rate: Decimal = daily_rate
+            # For monthly, we calculate on the basis of number of days in a month
+            start_day_of_month, no_of_days_in_start_month = calendar.monthrange(self.start_date.year, self.start_date.month)
+            start_day_of_end_month, no_of_days_in_end_month = calendar.monthrange(self.invoice_date.year, self.invoice_date.month)
+
+            if no_of_days_in_end_month == no_of_days_in_start_month:
+                rate: Decimal = self.rate / no_of_days_in_start_month
+            else:
+                # Change in month and also number of days in month
+                work_days_in_start_month = no_of_days_in_start_month - self.start_date.day + 1
+                work_days_in_end_month = self.invoice_date.day
+                rate_in_start_month = self.rate / no_of_days_in_start_month
+                rate_in_end_month = self.rate / no_of_days_in_end_month
+                rate = ((rate_in_start_month * work_days_in_start_month) + (rate_in_end_month * work_days_in_end_month)) / (work_days_in_start_month + work_days_in_end_month)
         return round(rate, 4)
 
     @property
@@ -396,18 +405,19 @@ class Consultant:
 
         return invoice
 
-    def invoices_in_range(self, start_date: datetime.date, end_date: datetime.date) -> Dict[datetime.date, Invoice]:
+    def invoices_in_range(self, start_date: datetime.date, end_date: Optional[datetime.date]) -> Dict[datetime.date, Invoice]:
         """Invoices in Range
 
         Computes all possible invoices for work done between start date and end date
 
         Args:
             start_date (datetime.date): Start date of range
-            end_date (datetime.date): End date of range
+            end_date (:obj:`datetime.date`, optional): End date of range, defaults to today
 
         Returns:
             dict: Dictionary containing invoice date as key and corresponding Invoice object as value
         """
+        end_date = end_date or datetime.date.today()
         invoices = {}
         next_date = start_date
         while next_date <= end_date:

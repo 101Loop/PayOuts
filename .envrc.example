@@ -1,0 +1,6 @@
+export JIRA_BASE_URL=https://___.atlassian.net/rest/api/2
+export TEMPO_BASE_URL=https://api.tempo.io/core/3
+export TEMPO_TOKEN=
+export DONT_JUDGE_ITS_LOCAL_TOKEN=
+export CONSULTANT_RATE=
+export CONSULTANT_BILLING_MODE=
