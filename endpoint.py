@@ -22,7 +22,7 @@ tempo = client.Tempo(auth_token=TEMPO_TOKEN, base_url=TEMPO_BASE_URL)
 
 
 @app.get("/invoices/")
-def get_invoices(start_date: datetime.date, end_date: Optional[str] = None, token: Optional[str] = Header(None)):
+def get_invoices(start_date: datetime.date, end_date: Optional[datetime.date] = None, token: Optional[str] = Header(None)):
     if token != TOKEN:
         raise HTTPException(status_code=401, detail="UnAuthorized!")
     c = Consultant(billing_mode=CONSULTANT_BILLING_MODE, rate=CONSULTANT_RATE, tempo_instance=tempo)
